@@ -25,6 +25,7 @@
 #include <linux/fs.h>
 #include <linux/kstrtox.h>
 #include <linux/usb/composite.h>
+#include <linux/of.h>
 
 #include "storage_common.h"
 
@@ -187,6 +188,9 @@ int fsg_lun_open(struct fsg_lun *curlun, const char *filename)
 	loff_t				min_sectors;
 	unsigned int			blkbits;
 	unsigned int			blksize;
+	struct device_node		*np = NULL;
+	const char				*model = NULL;
+	bool					model_valid = false;
 
 	/* R/W if we can, R/O if we must */
 	ro = curlun->initially_ro;
@@ -245,10 +249,32 @@ int fsg_lun_open(struct fsg_lun *curlun, const char *filename)
 	if (curlun->cdrom) {
 		min_sectors = 300;	/* Smallest track is 300 frames */
 		if (num_sectors >= 256*60*75) {
-			num_sectors = 256*60*75 - 1;
-			LINFO(curlun, "file too big: %s\n", filename);
-			LINFO(curlun, "using only first %d blocks\n",
-					(int) num_sectors);
+			np = of_find_node_by_path("/");
+			of_property_read_string(np, "model", &model);
+			of_node_put(np);
+
+			if (model) {
+				static const char *valid_models[] = {
+					"ArmKVM Standard V1",
+					"ArmKVM Standard V2",
+					"ArmKVM Standard PCIe V1",
+					"JINPIN BMC PCIe V1",
+					"JINPIN BMC PCIe V2",
+				};
+				for (int i = 0; i < sizeof(valid_models) / sizeof(valid_models[0]); i++) {
+					if (strncmp(model, valid_models[i], strlen(valid_models[i])) == 0) {
+						model_valid = true;
+						break;
+					}
+				}
+			}
+
+			if (!model_valid) {
+				num_sectors = 256*60*75 - 1;
+				LINFO(curlun, "file too big: %s\n", filename);
+				LINFO(curlun, "using only first %d blocks\n",
+						(int) num_sectors);
+			}
 		}
 	}
 	if (num_sectors < min_sectors) {

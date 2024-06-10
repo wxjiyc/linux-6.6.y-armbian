@@ -10,6 +10,19 @@
 / {
 	interrupt-parent = <&gic>;
 
+	soc {
+		dump_reg: dump_reg@20000 {
+			compatible = "allwinner,sunxi-dump-reg";
+			reg = <0x0 0x00020000 0x0 0x0004>;
+			status = "okay";
+		};
+		
+		sunxi-info {
+			compatible = "allwinner,sun8i-t113s-sys-info";
+			status = "okay";
+		};
+	};
+
 	cpus {
 		#address-cells = <1>;
 		#size-cells = <0>;

@@ -1,0 +1,372 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+* Copyright (C) 2024 Arm Ltd.
+*/
+
+/dts-v1/;
+
+#include "sun50i-h616.dtsi"
+#include "sun50i-h616-cpu-opp.dtsi"
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/leds/common.h>
+
+/ {
+	model = "ArmKVM Standard V1";
+	compatible = "nekocloud,armkvm-standard-v1", "allwinner,sun50i-h616";
+	
+	aliases {
+		serial0 = &uart0;
+		serial2 = &uart2;
+		ethernet0 = &emac1;
+	};
+	
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+	
+	leds {
+		compatible = "gpio-leds";
+		
+		led-0 {
+			gpios = <&pio 2 13 GPIO_ACTIVE_HIGH>; /* PC13 */
+			linux,default-trigger = "heartbeat";
+		};
+	};
+	
+	reg_vcc5v: regulator-5v {
+		compatible = "regulator-fixed";
+		regulator-name = "vcc-5v";
+		regulator-min-microvolt = <5000000>;
+		regulator-max-microvolt = <5000000>;
+		regulator-always-on;
+	};
+	
+	ac200_pwm_clk: ac200_clk {
+		compatible = "pwm-clock";
+		#clock-cells = <0>;
+		pwms = <&pwm 5 500 0>;
+		clock-frequency = <2000000>;
+		status = "okay";
+	};
+	
+	soc {
+		pwm: pwm@300a000 {
+			compatible = "allwinner,sun50i-h616-pwm";
+			reg = <0x0300a000 0x400>;
+			clocks = <&osc24M>, <&ccu CLK_BUS_PWM>;
+			clock-names = "mod", "bus";
+			resets = <&ccu RST_BUS_PWM>;
+			pwm-number = <6>;
+			pwm-base = <0x0>;
+			sunxi-pwms = <&pwm0>, <&pwm1>, <&pwm2>, <&pwm3>, <&pwm4>, <&pwm5>;
+			#pwm-cells = <3>;
+			status = "okay";
+		};
+		
+		pwm0: pwm0@0300a000 {
+			compatible = "allwinner,sunxi-pwm0";
+		};
+		
+		pwm1: pwm1@0300a000 {
+			compatible = "allwinner,sunxi-pwm1";
+			pinctrl-names = "default";
+			pinctrl-0 = <&pwm1_ph_pin>;
+		};
+		
+		pwm2: pwm2@0300a000 {
+			compatible = "allwinner,sunxi-pwm2";
+			pinctrl-names = "default";
+			pinctrl-0 = <&pwm2_ph_pin>;
+		};
+		
+		pwm3: pwm3@0300a000 {
+			compatible = "allwinner,sunxi-pwm3";
+			pinctrl-names = "default";
+			pinctrl-0 = <&pwm3_ph_pin>;
+		};
+		
+		pwm4: pwm4@0300a000 {
+			compatible = "allwinner,sunxi-pwm4";
+			pinctrl-names = "default";
+			pinctrl-0 = <&pwm4_ph_pin>;
+		};
+		
+		pwm5: pwm5@0300a000 {
+			compatible = "allwinner,sunxi-pwm5";
+			pinctrl-names = "default";
+			pinctrl-0 = <&pwm5_pin>;
+			clk_bypass_output = <0x1>;
+			status = "okay";
+		};
+	};
+};
+
+&cpu0 {
+	cpu-supply = <&reg_dcdc2>;
+	status = "okay";
+};
+
+&r_i2c {
+	status = "okay";
+	
+	axp313: pmic@36 {
+		compatible = "x-powers,axp313a";
+		reg = <0x36>;
+		#interrupt-cells = <1>;
+		interrupt-controller;
+		interrupt-parent = <&pio>;
+		
+		vin1-supply = <&reg_vcc5v>;
+		vin2-supply = <&reg_vcc5v>;
+		vin3-supply = <&reg_vcc5v>;
+		
+		regulators {
+			reg_aldo1: aldo1 {
+				regulator-always-on;
+				regulator-min-microvolt = <1800000>;
+				regulator-max-microvolt = <1800000>;
+				regulator-name = "vcc1v8";
+			};
+			
+			reg_dldo1: dldo1 {
+				regulator-always-on;
+				regulator-min-microvolt = <3300000>;
+				regulator-max-microvolt = <3300000>;
+				regulator-name = "vcc3v3";
+			};
+			
+			reg_dcdc1: dcdc1 {
+				regulator-always-on;
+				regulator-min-microvolt = <810000>;
+				regulator-max-microvolt = <990000>;
+				regulator-step-delay-us = <25>;
+				regulator-final-delay-us = <50>;
+				regulator-name = "vdd-gpu-sys";
+			};
+			
+			reg_dcdc2: dcdc2 {
+				regulator-always-on;
+				regulator-min-microvolt = <500000>;
+				regulator-max-microvolt = <1100000>;
+				regulator-step-delay-us = <25>;
+				regulator-final-delay-us = <50>;
+				regulator-ramp-delay = <200>;
+				regulator-name = "vdd-cpu";
+			};
+			
+			reg_dcdc3: dcdc3 {
+				regulator-always-on;
+				regulator-min-microvolt = <1500000>;
+				regulator-max-microvolt = <1500000>;
+				regulator-step-delay-us = <25>;
+				regulator-final-delay-us = <50>;
+				regulator-name = "vdd-dram";
+			};
+		};
+	};
+};
+
+&pio {
+	vcc-pc-supply = <&reg_dldo1>;
+	vcc-pf-supply = <&reg_dldo1>;
+	vcc-pg-supply = <&reg_aldo1>;
+	vcc-ph-supply = <&reg_dldo1>;
+	vcc-pi-supply = <&reg_dldo1>;
+	
+	/omit-if-no-ref/
+	i2c0_pi_pins: i2c0-pi-pins {
+		pins = "PI5", "PI6";
+		function = "i2c0";
+	};
+	
+	/omit-if-no-ref/
+	i2c1_pi_pins: i2c1-pi-pins {
+		pins = "PI7", "PI8";
+		function = "i2c1";
+	};
+	
+	/omit-if-no-ref/
+	i2c2_pi_pins: i2c2-pi-pins {
+		pins = "PI9", "PI10";
+		function = "i2c2";
+	};
+	
+	i2c3_pa_pins: i2c3-pa-pins {
+		pins = "PA10", "PA11";
+		function = "i2c3";
+		bias-pull-up;
+	};
+	
+	/omit-if-no-ref/
+	i2c4_pg_pins: i2c4-pg-pins {
+		pins = "PG15", "PG16";
+		function = "i2c4";
+	};
+	
+	/omit-if-no-ref/
+	i2c4_ph_pins: i2c4-ph-pins {
+		pins = "PH6", "PH7";
+		function = "i2c4";
+	};
+	
+	/omit-if-no-ref/
+	uart2_ph_pins: uart2-ph-pins {
+		pins = "PH5", "PH6";
+		function = "uart2";
+	};
+	
+	/omit-if-no-ref/
+	uart2_pi_pins: uart2-pi-pins {
+		pins = "PI5", "PI6";
+		function = "uart2";
+	};
+	
+	/omit-if-no-ref/
+	uart3_pi_pins: uart3-pi-pins {
+		pins = "PI9", "PI10";
+		function = "uart3";
+	};
+	
+	/omit-if-no-ref/
+	uart4_pi_pins: uart4-pi-pins {
+		pins = "PI13", "PI14";
+		function = "uart4";
+	};
+	
+	/omit-if-no-ref/
+	spi1_cs1_pin: spi1-cs1-pin {
+		pins = "PH9";
+		function = "spi1";
+	};
+	
+	/omit-if-no-ref/
+	pwm1_ph_pin: pwm1-ph-pin {
+		pins = "PH3";
+		function = "pwm1";
+	};
+	
+	/omit-if-no-ref/
+	pwm2_ph_pin: pwm2-ph-pin {
+		pins = "PH2";
+		function = "pwm2";
+	};
+	
+	/omit-if-no-ref/
+	pwm3_ph_pin: pwm3-ph-pin {
+		pins = "PH0";
+		function = "pwm3";
+	};
+	
+	/omit-if-no-ref/
+	pwm4_ph_pin: pwm4-ph-pin {
+		pins = "PH1";
+		function = "pwm4";
+	};
+	
+	/omit-if-no-ref/
+	pwm5_pin: pwm5-pin {
+		pins = "PA12";
+		function = "pwm5";
+	};
+};
+
+&uart0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart0_ph_pins>;
+	status = "okay";
+};
+
+&uart2 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart2_ph_pins>;
+	status = "okay";
+};
+
+&mmc0 {
+	vmmc-supply = <&reg_dldo1>;
+	cd-gpios = <&pio 5 6 GPIO_ACTIVE_LOW>; /* PF6 */
+	bus-width = <4>;
+	status = "okay";
+};
+
+&i2c3 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c3_pa_pins>;
+	status = "okay";
+	
+	ac200_x: mfd@10 {
+		compatible = "x-powers,ac200-sunxi";
+		reg = <0x10>;
+		clocks = <&ac200_pwm_clk>;
+		nvmem-cells = <&ephy_calibration>;
+		nvmem-cell-names = "calibration";
+		
+		ac200_ephy: phy {
+			compatible = "x-powers,ac200-ephy-sunxi";
+			status = "okay";
+		};
+	};
+};
+
+&i2c4 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c4_pg_pins>;
+	status = "okay";
+	
+	eeprom: eeprom@50 {
+		compatible = "atmel,24c16";
+		reg = <0x50>;
+		pagesize = <16>;
+		sec-data;
+		status = "okay";
+	};
+};
+
+&usbotg {
+	dr_mode = "peripheral";
+	status = "okay";
+};
+
+&usbphy {
+	status = "okay";
+};
+
+&ohci1 {
+	status = "okay";
+};
+
+&ohci2 {
+	status = "okay";
+};
+
+&ehci1 {
+	status = "okay";
+};
+
+&ehci2 {
+	status = "okay";
+};
+
+&emac1 {
+	phy-mode = "rmii";
+	phy-handle = <&rmii_phy>;
+	phy-supply = <&reg_dldo1>;
+	allwinner,rx-delay-ps = <3100>;
+	allwinner,tx-delay-ps = <700>;
+	status = "okay";
+};
+
+&mdio1 {
+	rmii_phy: ethernet-phy@1 {
+		compatible = "ethernet-phy-ieee802.3-c22";
+		reg = <1>;
+	};
+};
+
+&sid {
+	ephy_calibration: ephy-calibration@2c {
+		reg = <0x2c 0x2>;
+	};
+};
