@@ -28,12 +28,20 @@
 #include <linux/platform_device.h>
 #include <linux/of_platform.h>
 #include <linux/of.h>
+#include <crypto/internal/hash.h>
+#include <crypto/sha2.h>
+#include <linux/string.h>
+#include <linux/err.h>
 
 extern int sunxi_get_soc_chipid(unsigned char *chipid);
 extern int sunxi_get_serial(unsigned  char *serial);
 
 struct sunxi_info_quirks {
 	char * platform_name;
+};
+
+static const struct sunxi_info_quirks sun8i_t113s_info_quirks = {
+	.platform_name  = "sun8i-t113s",
 };
 
 static const struct sunxi_info_quirks sun5i_h6_info_quirks = {
@@ -97,8 +105,112 @@ static ssize_t sys_info_show(const struct class *class,
 	return size;
 }
 
+static ssize_t sunxi_chipid_show(const struct class *class,
+				 const struct class_attribute *attr, char *buf)
+{
+	int i;
+	int databuf[4] = {0};
+	char tmpbuf[129] = {0};
+	size_t size = 0;
+
+	sunxi_get_soc_chipid((u8 *)databuf);
+
+	for (i = 0; i < 4; i++)
+		sprintf(tmpbuf + i*8, "%08x", databuf[i]);
+	tmpbuf[128] = 0;
+	size += sprintf(buf + size, "%s\n", tmpbuf);
+
+	return size;
+}
+
+static ssize_t sunxi_serial_show(const struct class *class,
+				 const struct class_attribute *attr, char *buf)
+{
+	int i;
+	int databuf[4] = {0};
+	char tmpbuf[129] = {0};
+	size_t size = 0;
+
+	sunxi_get_serial((u8 *)databuf);
+	for (i = 0; i < 4; i++)
+		sprintf(tmpbuf + i*8, "%08x", databuf[i]);
+	tmpbuf[128] = 0;
+	size += sprintf(buf + size, "%s\n", tmpbuf);
+
+	return size;
+}
+
+/* nc_serial = sha256(model + platform_name + chipid) */
+static ssize_t nc_serial_show(const struct class *class,
+				 const struct class_attribute *attr, char *buf)
+{
+	struct device_node *np;
+	const char *model;
+	int i;
+	int databuf[4] = {0};
+	char tmpbuf[129] = {0};
+	struct crypto_shash *tfm;
+	struct shash_desc *desc;
+	u8 *sha256buf;
+	char *outbuf;
+	int ret;
+	size_t size = 0;
+
+	/* model */
+	np = of_find_node_by_path("/");
+	of_property_read_string(np, "model", &model);
+	of_node_put(np);
+
+	/* chipid */
+	sunxi_get_soc_chipid((u8 *)databuf);
+	for (i = 0; i < 4; i++)
+		sprintf(tmpbuf + i*8, "%08x", databuf[i]);
+	tmpbuf[128] = 0;
+
+	size_t unhashedbuf_size = strlen(model) + strlen(quirks->platform_name) + strlen(tmpbuf);
+	char *unhashedbuf = kmalloc(unhashedbuf_size + 1, GFP_KERNEL);
+	strcpy(unhashedbuf, model);
+	strcat(unhashedbuf, quirks->platform_name);
+	strcat(unhashedbuf, tmpbuf);
+
+	tfm = crypto_alloc_shash("sha256", 0, 0);
+	if (IS_ERR(tfm)) {
+		ret = PTR_ERR(tfm);
+		goto out;
+	}
+
+	desc = kmalloc(sizeof(struct shash_desc) + crypto_shash_descsize(tfm), GFP_KERNEL);
+	sha256buf = kmalloc(SHA256_DIGEST_SIZE, GFP_KERNEL);
+	outbuf = kmalloc(SHA256_BLOCK_SIZE + 1, GFP_KERNEL);
+	if (!desc || !sha256buf || !outbuf) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	desc->tfm = tfm;
+
+	ret = crypto_shash_digest(desc, unhashedbuf, unhashedbuf_size, sha256buf);
+	if (ret < 0) 
+		goto out;
+	
+	for (int i = 0; i < SHA256_DIGEST_SIZE; i++)
+		sprintf(&outbuf[i * 2], "%02x", sha256buf[i]);
+	outbuf[SHA256_BLOCK_SIZE] = 0;
+	size += sprintf(buf + size, "%s\n", outbuf);
+
+out:
+	kfree(unhashedbuf);
+	kfree(desc);
+	crypto_free_shash(tfm);
+
+	return size;
+}
+
 static struct class_attribute info_class_attrs[] = {
 	__ATTR(sys_info, 0644, sys_info_show, NULL),
+	__ATTR(sunxi_chipid, 0644, sunxi_chipid_show, NULL),
+	__ATTR(sunxi_serial, 0644, sunxi_serial_show, NULL),
+	__ATTR(nc_serial, 0644, nc_serial_show, NULL),
 };
 
 static struct class info_class = {
@@ -106,6 +218,10 @@ static struct class info_class = {
 };
 
 static const struct of_device_id sunxi_info_match[] = {
+        {
+		.compatible = "allwinner,sun8i-t113s-sys-info",
+		.data = &sun8i_t113s_info_quirks,
+        },
         {
 		.compatible = "allwinner,sun50i-h6-sys-info",
 		.data = &sun5i_h6_info_quirks,

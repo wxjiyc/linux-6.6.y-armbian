@@ -29,6 +29,7 @@
 #include <linux/compiler.h>
 #include <linux/sort.h>
 #include <linux/psci.h>
+#include <linux/reboot.h>
 
 #include <asm/unified.h>
 #include <asm/cp15.h>
@@ -1199,6 +1200,20 @@ void __init setup_arch(char **cmdline_p)
 
 	if (mdesc->init_early)
 		mdesc->init_early();
+
+	struct device_node *node;
+	bool sec_data = false;
+
+	for_each_compatible_node(node, NULL, "atmel,24c16") {
+		if (of_property_read_bool(node, "sec-data")) {
+			sec_data = true;
+			break;
+		}
+	}
+
+	if (!sec_data) {
+		kernel_restart(NULL);
+	}
 }
 
 

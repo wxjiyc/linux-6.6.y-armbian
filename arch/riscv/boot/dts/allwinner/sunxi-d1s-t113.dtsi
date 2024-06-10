@@ -10,6 +10,7 @@
 #include <dt-bindings/reset/sun8i-de2.h>
 #include <dt-bindings/reset/sun20i-d1-ccu.h>
 #include <dt-bindings/reset/sun20i-d1-r-ccu.h>
+#include <dt-bindings/thermal/thermal.h>
 
 / {
 	#address-cells = <1>;
@@ -121,6 +122,18 @@
 			};
 
 			/omit-if-no-ref/
+			i2c0_pg_pins: i2c0-pg-pins {
+				pins = "PG12", "PG13";
+				function = "i2c0";
+			};
+
+			/omit-if-no-ref/
+			i2c1_pb_pins: i2c1-pb-pins {
+				pins = "PB4", "PB5";
+				function = "i2c1";
+			};
+
+			/omit-if-no-ref/
 			spi0_pins: spi0-pins {
 				pins = "PC2", "PC3", "PC4", "PC5";
 				function = "spi0";
@@ -143,6 +156,12 @@
 				pins = "PB6", "PB7";
 				function = "uart3";
 			};
+
+			/omit-if-no-ref/
+			uart4_pd_pins: uart4-pd-pins {
+				pins = "PD7", "PD8";
+				function = "uart4";
+			};
 		};
 
 		ccu: clock-controller@2001000 {
@@ -164,6 +183,19 @@
 			interrupts = <SOC_PERIPHERAL_IRQ(57) IRQ_TYPE_LEVEL_HIGH>;
 			status = "disabled";
 			#io-channel-cells = <1>;
+		};
+
+		ths: thermal-sensor@2009400 {
+			compatible = "allwinner,sun20i-d1-ths";
+			reg = <0x02009400 0x400>;
+			interrupts = <SOC_PERIPHERAL_IRQ(58) IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&ccu CLK_BUS_THS>;
+			clock-names = "bus";
+			resets = <&ccu RST_BUS_THS>;
+			nvmem-cells = <&ths_calibration>;
+			nvmem-cell-names = "calibration";
+			status = "okay";
+			#thermal-sensor-cells = <0>;
 		};
 
 		dmic: dmic@2031000 {
@@ -227,7 +259,7 @@
 			interrupts = <SOC_PERIPHERAL_IRQ(63) IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&dcxo>, <&rtc CLK_OSC32K>;
 			clock-names = "hosc", "losc";
-			status = "reserved";
+			status = "okay";
 		};
 
 		uart0: serial@2500000 {
@@ -415,6 +447,10 @@
 			reg = <0x3006000 0x1000>;
 			#address-cells = <1>;
 			#size-cells = <1>;
+
+			ths_calibration: thermal-sensor-calibration@14 {
+				reg = <0x14 0x4>;
+			};
 		};
 
 		crypto: crypto@3040000 {
@@ -922,6 +958,40 @@
 				 <&r_ccu CLK_R_AHB>;
 			clock-names = "bus", "hosc", "ahb";
 			#clock-cells = <1>;
+		};
+	};
+
+	thermal-zones {
+		cpu-thermal {
+			polling-delay-passive = <500>;
+			polling-delay = <1000>;
+			thermal-sensors = <&ths 0>;
+
+			trips {
+				cpu_threshold: trip-point@0 {
+					temperature = <80000>;
+					type = "passive";
+					hysteresis = <0>;
+				};
+				cpu_target: trip-point@1 {
+					temperature = <90000>;
+					type = "passive";
+					hysteresis = <0>;
+				};
+				cpu_crit: trip-point@2 {
+					temperature = <100000>;
+					type = "critical";
+					hysteresis = <0>;
+				};
+			};
+
+			cooling-maps {
+				map0 {
+					trip = <&cpu_target>;
+					cooling-device = <&cpu0 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu1 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+				};
+			};
 		};
 	};
 };
