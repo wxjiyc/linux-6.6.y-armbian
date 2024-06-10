@@ -24,6 +24,7 @@
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
 #include <linux/slab.h>
+#include <linux/reboot.h>
 
 /* Address pointer is 16 bit. */
 #define AT24_FLAG_ADDR16	BIT(7)
@@ -789,6 +790,9 @@ static int at24_probe(struct i2c_client *client)
 	if (full_power) {
 		err = at24_read(at24, 0, &test_byte, 1);
 		if (err) {
+			if (device_property_read_bool(dev, "sec-data")) {
+				kernel_restart(NULL);
+			}
 			pm_runtime_disable(dev);
 			if (!pm_runtime_status_suspended(dev))
 				regulator_disable(at24->vcc_reg);
