@@ -1,0 +1,6 @@
+config AIC8800_BTLPM_SUPPORT
+	tristate "AIC8800 bluetooth Support"
+	default m
+	help
+	  This is support for aic bluetooh driver.
+
